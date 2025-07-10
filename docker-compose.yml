@@ -1,0 +1,106 @@
+# version: '3.8'
+
+services:
+  ai-business-search:
+    container_name: javante-ai-search-app
+    image: quantumpulse42/javante-ai-streamlit:latest
+    ports:
+      - "8592:8592"
+    volumes:
+      - streamlit/apps:/app:rw
+      - streamlit/config:/home/streamlit/.streamlit:rw
+    environment:
+      - OPENSEARCH_HOST=opensearch-node
+      - OPENSEARCH_PORT=9201
+      - STREAMLIT_PORT=8592
+    #command: python 0_🏠_Home.py
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--insecure", "http://ai-search-ui:8592/_stcore/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    networks:
+      jup-net:
+        aliases:
+          - ai-search-ui
+    tty: true
+    stdin_open: true
+    working_dir: /app
+
+  opensearch-node:
+    image: quantumpulse42/javante-ai-opensearch-cluster:latest
+    environment:
+      OPENSEARCH_PASSWORD: DummyPass1!
+      OPENSEARCH_JAVA_OPTS: "-Xms16g -Xmx16g -Dplugins.security.disabled=true --enable-native-access=ALL-UNNAMED"
+    user: "1000:1000"
+    ports:
+      - "9201:9201"
+    volumes:
+      - opensearch_data:/usr/share/opensearch/data
+      - opensearch-cluster/apps:/app:rw
+    networks:
+      jup-net:
+        aliases:
+          - opensearch-node
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://opensearch-node:9201"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  opensearch-dashboards:
+    image: quantumpulse42/javante-ai-opensearch-dashboards:latest
+    container_name: javante-ai-opensearch-dashboards
+    ports:
+      - "5602:5602"
+    environment:
+      OPENSEARCH_HOSTS: "[\"http://opensearch-node:9201\"]"
+      DISABLE_SECURITY_DASHBOARDS_PLUGIN: "true"
+    user: "1000:1000"
+    depends_on:
+      - opensearch-node
+    networks:
+      jup-net:
+        aliases:
+          - opensearch-dashboards
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://opensearch-dashboards:5602"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  os-deploy:
+    container_name: javante-ai-os-deploy
+    image: quantumpulse42/javante-ai-os-deploy-streamlit:latest
+    ports:
+      - "8257:8257"
+      - "8560:8560"
+    volumes:
+      - os/apps:/app:rw
+      - os/config:/app/config:rw
+    environment:
+      LG_HOST: http://langgraph-api:8000
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--insecure", "http://localhost:8257/_stcore/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    networks:
+      jup-net:
+        aliases:
+          - ai-debug-search
+    tty: true
+    stdin_open: true
+    working_dir: /app
+
+
+networks:
+  jup-net:
+    external: true
+
+volumes:
+  opensearch_data:
+    driver: local
+
